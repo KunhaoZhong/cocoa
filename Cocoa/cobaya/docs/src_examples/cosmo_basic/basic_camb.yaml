@@ -5,7 +5,7 @@ theory:
       bbn_predictor: PArthENoPE_880.2_standard.dat
       lens_potential_accuracy: 1
       num_massive_neutrinos: 1
-      nnu: 3.046
+      nnu: 3.044
       theta_H0_range:
       - 20
       - 100
@@ -103,7 +103,7 @@ params:
       scale: 0.006
     proposal: 0.003
     latex: \tau_\mathrm{reio}
-  zre:
+  zrei:
     latex: z_\mathrm{re}
   sigma8:
     latex: \sigma_8
@@ -128,7 +128,9 @@ params:
     latex: r_\mathrm{drag}
 sampler:
   mcmc:
-    covmat: auto
     drag: true
     oversample_power: 0.4
     proposal_scale: 1.9
+    covmat: auto
+    Rminus1_stop: 0.01
+    Rminus1_cl_stop: 0.2

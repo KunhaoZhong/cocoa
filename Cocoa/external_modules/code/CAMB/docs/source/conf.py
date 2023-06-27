@@ -40,14 +40,14 @@ def setup(app):
 
 
 # If your documentation needs a minimal Sphinx version, state it here.
-needs_sphinx = '1.3'
+needs_sphinx = '4.0'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinx.ext.viewcode', 'sphinx.ext.autosummary',
-    'sphinx.ext.mathjax'
+    'sphinx.ext.mathjax', 'sphinx_rtd_theme', 'sphinxcontrib.jquery'
 ]
 
 intersphinx_mapping = {'python': ('https://docs.python.org/3', None),
@@ -72,9 +72,9 @@ source_encoding = 'utf-8-sig'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Code for Anisotropies in the Microwave Background (CAMB)'
-copyright = u'Antony Lewis'
-author = u'Antony Lewis'
+project = 'Code for Anisotropies in the Microwave Background (CAMB)'
+copyright = 'Antony Lewis'
+author = 'Antony Lewis'
 
 version = camb.__version__
 release = camb.__version__
@@ -84,7 +84,7 @@ release = camb.__version__
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:

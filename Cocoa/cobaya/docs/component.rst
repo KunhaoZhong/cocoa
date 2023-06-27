@@ -20,12 +20,12 @@ ComponentCollection class
 Provider class
 ---------------
 
-.. autoclass:: component.Provider
+.. autoclass:: theory.Provider
    :members:
 
 
 HasDefaults class
 ------------------
 
-.. autoclass:: input.HasDefaults
+.. autoclass:: component.HasDefaults
    :members:

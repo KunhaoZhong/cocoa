@@ -5,20 +5,19 @@ import platform
 import signal
 from pprint import pformat
 import numpy as np
-from matplotlib import cm as cmap
 import io
 
 # Local
 from cobaya.yaml import yaml_dump
 from cobaya.cosmo_input import input_database
-from .input_database import  _combo_dict_text
+from cobaya.cosmo_input.input_database import _combo_dict_text
 from cobaya.cosmo_input.autoselect_covmat import get_best_covmat, covmat_folders
 from cobaya.cosmo_input.create_input import create_input
-from cobaya.bib import prettyprint_bib, get_bib_info, get_bib_component
+from cobaya.bib import pretty_repr_bib, get_bib_info, get_bib_component
 from cobaya.tools import warn_deprecation, get_available_internal_class_names, \
     cov_to_std_and_corr, resolve_packages_path, sort_cosmetic
 from cobaya.input import get_default_info
-from cobaya.conventions import subfolders, kinds, _packages_path_env, _packages_path
+from cobaya.conventions import subfolders, kinds, packages_path_env, packages_path_input
 
 # per-platform settings for correct high-DPI scaling
 if platform.system() == "Linux":
@@ -29,16 +28,32 @@ else:  # Windows/Mac
     set_attributes = ["AA_EnableHighDpiScaling"]
 
 try:
-    # noinspection PyUnresolvedReferences
-    from PySide2.QtWidgets import QWidget, QApplication, QVBoxLayout, QHBoxLayout, \
-        QGroupBox, QScrollArea, QTabWidget, QComboBox, QPushButton, QTextEdit, \
-        QFileDialog, QCheckBox, QLabel, QMenuBar, QAction, QDialog, QTableWidget, \
-        QTableWidgetItem, QAbstractItemView
-    # noinspection PyUnresolvedReferences
-    from PySide2.QtGui import QColor
-    # noinspection PyUnresolvedReferences
-    from PySide2.QtCore import Slot, Qt, QCoreApplication, QSize, QSettings
+    try:
+        # noinspection PyUnresolvedReferences
+        from PySide6.QtWidgets import QWidget, QApplication, QVBoxLayout, QHBoxLayout, \
+            QGroupBox, QScrollArea, QTabWidget, QComboBox, QPushButton, QTextEdit, \
+            QFileDialog, QCheckBox, QLabel, QMenuBar, QDialog, QTableWidget, \
+            QTableWidgetItem, QAbstractItemView, QMainWindow
+        # noinspection PyUnresolvedReferences
+        from PySide6.QtGui import QColor, QAction
+        # noinspection PyUnresolvedReferences
+        from PySide6.QtCore import Slot, Qt, QCoreApplication, QSize, QSettings, QPoint
 
+        set_attributes = []
+        exec_method_name = "exec"
+    except ImportError:
+        # noinspection PyUnresolvedReferences
+        from PySide2.QtWidgets import QWidget, QApplication, QVBoxLayout, QHBoxLayout, \
+            QGroupBox, QScrollArea, QTabWidget, QComboBox, QPushButton, QTextEdit, \
+            QFileDialog, QCheckBox, QLabel, QMenuBar, QAction, QDialog, QTableWidget, \
+            QTableWidgetItem, QAbstractItemView, QMainWindow
+        # noinspection PyUnresolvedReferences
+        from PySide2.QtGui import QColor
+        # noinspection PyUnresolvedReferences
+        from PySide2.QtCore import Slot, Qt, QCoreApplication, QSize, QSettings
+
+        os.environ['QT_API'] = 'pyside2'
+        exec_method_name = "exec_"
     for attribute in set_attributes:
         # noinspection PyArgumentList
         QApplication.setAttribute(getattr(Qt, attribute))
@@ -48,12 +63,9 @@ except ImportError:
 # Quit with C-c
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-# Color map for correlatins
-cmap_corr = cmap.get_cmap("coolwarm_r")
-
 
 def text(key, contents):
-    desc = (contents or {}).get(input_database._desc)
+    desc = (contents or {}).get("desc")
     return desc or key
 
 
@@ -166,10 +178,18 @@ class MainWindow(QWidget):
         self.read_settings()
         self.show()
 
+    def getScreen(self):
+        try:
+            return self.screen().availableGeometry()
+        except:
+            return QApplication.screenAt(
+                self.mapToGlobal(QPoint(self.width() // 2, 0))).availableGeometry()
+
     def read_settings(self):
+
         settings = get_settings()
         # noinspection PyArgumentList
-        screen = QApplication.desktop().screenGeometry()
+        screen = self.getScreen()
         h = min(screen.height() * 5 / 6., 900)
         size = QSize(min(screen.width() * 5 / 6., 1200), h)
         pos = settings.value("pos", None)
@@ -216,7 +236,7 @@ class MainWindow(QWidget):
     def refresh_preset(self):
         preset = list(getattr(input_database, "preset"))[
             self.combos["preset"].currentIndex()]
-        if preset is input_database._none:
+        if preset is input_database.none:
             return
         info = create_input(
             get_comments=True,
@@ -225,7 +245,7 @@ class MainWindow(QWidget):
         self.refresh_display(info)
         # Update combo boxes to reflect the preset values, without triggering update
         for k, v in input_database.preset[preset].items():
-            if k in [input_database._desc]:
+            if k in ["desc"]:
                 continue
             self.combos[k].blockSignals(True)
             self.combos[k].setCurrentIndex(
@@ -236,22 +256,23 @@ class MainWindow(QWidget):
     def refresh_display(self, info):
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            comments = info.pop(input_database._comment, None)
+            comments = info.pop("comment", None)
             comments_text = "\n# " + "\n# ".join(comments)
         except (TypeError,  # No comments
                 AttributeError):  # Failed to generate info (returned str instead)
             comments_text = ""
         self.display["python"].setText("info = " + pformat(info) + comments_text)
-        self.display["yaml"].setText(yaml_dump(sort_cosmetic(info)) + comments_text)
-        self.display["bibliography"].setText(prettyprint_bib(*get_bib_info(info)))
+        self.display["yaml"].setText((info if isinstance(info, str) else
+                                      yaml_dump(sort_cosmetic(info))) + comments_text)
+        self.display["bibliography"].setText(pretty_repr_bib(*get_bib_info(info)))
         # Display covmat
         packages_path = resolve_packages_path()
         if not packages_path:
             self.covmat_text.setText(
                 "\nIn order to find a covariance matrix, you need to define an external "
                 "packages installation path, e.g. via the env variable %r.\n" %
-                _packages_path_env)
-        elif any(not os.path.isdir(d.format(**{_packages_path: packages_path}))
+                packages_path_env)
+        elif any(not os.path.isdir(d.format(**{packages_path_input: packages_path}))
                  for d in covmat_folders):
             self.covmat_text.setText(
                 "\nThe external cosmological packages appear not to be installed where "
@@ -271,6 +292,9 @@ class MainWindow(QWidget):
                 list(self.current_params_in_covmat))
             self.covmat_table.setVerticalHeaderLabels(
                 list(self.current_params_in_covmat))
+            # Color map for correlations
+            from matplotlib import cm as cmap
+            cmap_corr = cmap.get_cmap("coolwarm_r")
             for i, pi in enumerate(self.current_params_in_covmat):
                 for j, pj in enumerate(self.current_params_in_covmat):
                     self.covmat_table.setItem(
@@ -316,10 +340,11 @@ class MainWindow(QWidget):
 
     @Slot()
     def copy_clipb(self):
+        clipboard = QApplication.clipboard()
         if self.display_tabs.currentWidget() == self.display["covmat"]:
-            self.clipboard.setText(self.save_covmat_txt())
+            clipboard.setText(self.save_covmat_txt())
         else:
-            self.clipboard.setText(self.display_tabs.currentWidget().toPlainText())
+            clipboard.setText(self.display_tabs.currentWidget().toPlainText())
 
     def show_defaults(self):
         kind, component = self.sender().data()
@@ -331,12 +356,10 @@ class DefaultsDialog(QWidget):
 
     def __init__(self, kind, component, parent=None):
         super().__init__()
-        self.clipboard = parent.clipboard
         self.setWindowTitle("%s : %s" % (kind, component))
         self.setGeometry(0, 0, 500, 500)
         # noinspection PyArgumentList
-        self.move(
-            QApplication.desktop().screenGeometry().center() - self.rect().center())
+        self.move(parent.getScreen().center() - self.rect().center())
         self.show()
         # Main layout
         self.layout = QVBoxLayout()
@@ -372,7 +395,7 @@ class DefaultsDialog(QWidget):
 
     @Slot()
     def copy_clipb(self):
-        self.clipboard.setText(self.display_tabs.currentWidget().toPlainText())
+        QApplication.clipboard().setText(self.display_tabs.currentWidget().toPlainText())
 
 
 # noinspection PyArgumentList
@@ -384,16 +407,15 @@ def gui_script():
         # TODO: fix this long logger setup
         from cobaya.log import logger_setup, LoggedError
         logger_setup(0, None)
-        import logging
         raise LoggedError(
-            logging.getLogger("cosmo_generator"),
-            "PySide2 is not installed! "
+            "cosmo_generator",
+            "PySide is not installed! "
             "Check Cobaya's documentation for the cosmo_generator "
             "('Basic cosmology runs').")
-    clip = app.clipboard()
+
     window = MainWindow()
-    window.clipboard = clip
-    sys.exit(app.exec_())
+    window.show()
+    sys.exit(getattr(app, exec_method_name)())
 
 
 if __name__ == '__main__':

@@ -1,20 +1,19 @@
 import sys
-import platform
+from cobaya.likelihood import Likelihood
+from cobaya.theory import Theory
+from cobaya.run import run
+from cobaya.model import get_model
+from cobaya.typing import InputDict, PostDict
+from cobaya.log import LoggedError
+from cobaya.post import post
 
-if sys.version_info[0] == 2:
-    print('Cobaya no longer supports Python 2, please upgrade to Python 3')
+
+if sys.version_info < (3, 8):
+    print('Cobaya requires Python 3.8+, please upgrade.')
     sys.exit(1)
 
-if sys.version_info < (3, 7):
-    if sys.version_info < (3, 6):
-        print('Cobaya requires Python 3.6+, please upgrade.')
-        sys.exit(1)
-
-    if platform.python_implementation() != 'CPython':
-        raise ValueError('Cobaya only supports CPython implementations on Python 3.6')
-
 __author__ = "Jesus Torrado and Antony Lewis"
-__version__ = "3.0.3"
+__version__ = "3.3.1"
 __obsolete__ = False
-__year__ = "2021"
+__year__ = "2023"
 __url__ = "https://cobaya.readthedocs.io"

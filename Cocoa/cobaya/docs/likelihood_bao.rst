@@ -1,5 +1,5 @@
-Baryonic Acoustic Oscillations
-==============================
+Baryonic Acoustic Oscillations & Redshift Distortions
+======================================================
 
-.. automodule:: cobaya.likelihoods._base_classes._bao_prototype
+.. automodule:: cobaya.likelihoods.base_classes.bao
    :noindex:

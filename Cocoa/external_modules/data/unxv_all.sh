@@ -1,43 +1,63 @@
 #!/bin/bash
 
-rm -rf ./sn_data/
+source $ROOTDIR/external_modules/data/clean_all.sh 
+cd $ROOTDIR/external_modules/data
+
+echo 'DECOMPRESSING SN DATA'
 tar xf sn_data.xz
-
-rm -rf ./des_data/
-tar xf des_data.xz
-
-rm -rf ./bicep_keck_2015/
-tar xf bicep_keck_2015.xz
-
-rm -rf ./bao_data/
+echo 'DECOMPRESSING BAO DATA'
 tar xf bao_data.xz
+echo 'DECOMPRESSING H0LICOW DATA'
+tar xf h0licow_distance_chains.xz
 
 if [ -z "${THREAD_UNXZ}" ]; then
+	echo 'DECOMPRESSING SIMONS OBSERVATORY'
+	tar xf simons_observatory.xz
+	echo 'DECOMPRESSING SPT-3G HIELL DATA'
+	tar xf spt_hiell_2020.xz
+	echo 'DECOMPRESSING BICEP 2015 DATA'
+	tar xf bicep_keck_2015.xz
+	# ---------------------------------------------
 	cd ./planck
-	echo 'DECOMPRESSING CAMSPEC (2018)'
-	tar xf CamSpec2018.xz
+	# ---------------------------------------------
+	echo 'DECOMPRESSING SPT-3G Y1 EETE DATA'
+	tar xf spt3g_Y1_EETE.clik.xz
+	# ---------------------------------------------
 	echo 'DECOMPRESSING SUPPLEMENTAL DATA AND COVARIANCES'
 	tar xf planck_supp_data_and_covmats.xz
-	echo 'DECOMPRESSING PLANCK-2015 (PLC-2.0)'
+	# ---------------------------------------------
+	echo 'DECOMPRESSING PLANCK-2015 (PLC-2.0) DATA'
 	tar xf plc_20.xz
-	echo 'DECOMPRESSING PLANCK-2018 (PLC-3.0)'
+	# ---------------------------------------------
+	echo 'DECOMPRESSING PLANCK-2018 (PLC-3.0) DATA'
 	cd ./plc_3.0
 	tar xf lensing.xz
 	tar xf low_l.xz
 	cd ./hi_l
+	rm -rf ./plik/
 	tar xf plik.xz
+	rm -rf ./plik_lite/
 	tar xf plik_lite.xz
-	cd ./camspec
-	tar xf camspec_107HM_1400_TT_smallclik.xz
-	tar xf camspec_10.7HM_1400_TTTEEEclik.xz
+	# ---------------------------------------------
 else
+	tar xf simons_observatory.xz &
+	proc8=$!
+	tar xf spt_hiell_2020.xz &
+	proc9=$!
+	tar xf bicep_keck_2015.xz &
+	proc10=$!
+	# ---------------------------------------------
 	cd ./planck
-	tar xf CamSpec2018.xz &
+	# ---------------------------------------------
+	tar xf spt3g_Y1_EETE.clik.xz &
 	proc1=$!
+	# ---------------------------------------------
 	tar xf planck_supp_data_and_covmats.xz &
 	proc2=$!
+	# ---------------------------------------------
 	tar xf plc_20.xz &
 	proc3=$!
+	# ---------------------------------------------
 	cd ./plc_3.0
 	tar xf lensing.xz &
 	proc4=$!
@@ -48,16 +68,16 @@ else
 	proc6=$!
 	tar xf plik_lite.xz	&
 	proc7=$!
-	cd ./camspec
-	tar xf camspec_107HM_1400_TT_smallclik.xz &
-	proc8=$!
-	tar xf camspec_10.7HM_1400_TTTEEEclik.xz &
-	proc9=$!
-
-	echo 'DECOMPRESSING CAMSPEC (2018)'
+	# ---------------------------------------------
+	# ---------------------------------------------
+	# ---------------------------------------------
 	echo 'DECOMPRESSING SUPPLEMENTAL DATA AND COVARIANCES'
-	echo 'DECOMPRESSING PLANCK-2015 (PLC-2.0)'
-	echo 'DECOMPRESSING PLANCK-2018 (PLC-3.0)'
+	echo 'DECOMPRESSING PLANCK-2015 (PLC-2.0) DATA'
+	echo 'DECOMPRESSING PLANCK-2018 (PLC-3.0) DATA'
+	echo 'DECOMPRESSING SPT-3G Y1 EETE DATA'
+	echo 'DECOMPRESSING SPT-3G HIELL DATA'
+	echo 'DECOMPRESSING SIMONS OBSERVATORY'
+	echo 'DECOMPRESSING BICEP 2015 DATA'
 	echo 'DECOMPRESSION IS HAPPENING IN PARALLEL - WAITING ALL OF THEM TO FINISH'
-	wait "$proc1" "$proc2" "$proc3" "$proc4" "$proc5" "$proc6" "$proc7" "$proc8" "$proc9"
+	wait "$proc1" "$proc2" "$proc3" "$proc4" "$proc5" "$proc6" "$proc7" "$proc8" "$proc9" "$proc10" 
 fi

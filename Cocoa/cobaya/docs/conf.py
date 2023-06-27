@@ -33,11 +33,15 @@ sys.path.insert(-1, os.path.abspath('../cobaya'))
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
+    'sphinx_autodoc_typehints',  # must be loaded *after* napoleon
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.inheritance_diagram',
-    'sphinx.ext.graphviz'
+    'sphinx.ext.graphviz',
+    'sphinxcontrib.programoutput',
+    'sphinx_rtd_theme',
+    'sphinxcontrib.jquery'
 ]
 
 inheritance_graph_attrs = dict(rankdir="LR", size='""')

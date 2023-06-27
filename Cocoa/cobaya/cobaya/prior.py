@@ -29,16 +29,21 @@ You can specify three different kinds of parameters:
   (e.g. to guess the pdf tails correctly if the derived quantity needs to be positive or
   negative -- defaulted to ``-.inf``, ``.inf`` resp.).
 
-The (optional) **reference** pdf (``ref``) for **sampled** parameters
-defines the region of the prior which is of most
-interest (e.g. where most of the prior mass is expected);
-samplers needing an initial point
-for a chain will attempt to draw it from the ``ref`` if it has been defined (otherwise
-from the prior). A good reference pdf will avoid a long *burn-in* stage during the
-sampling. If you assign a single value to ``ref``, samplers will always start from
-that value; however this makes convergence tests less reliable as each chain will
-start from the same point (so all chains could be stuck near the same point).
+The (optional) **reference** pdf (``ref``) for **sampled** parameters defines the region
+of the prior which is of most interest (e.g. where most of the prior mass is expected);
+samplers needing an initial point for a chain will attempt to draw it from the ``ref``
+if it has been defined (otherwise from the prior). A good reference pdf will avoid a long
+*burn-in* stage during the sampling. If you assign a single value to ``ref``, samplers
+will always start from that value; however this makes convergence tests less reliable as
+each chain will start from the same point (so all chains could be stuck near the same
+point).
 
+.. note::
+
+   When running in parallel with MPI you can give ``ref`` different values for each of
+   the different parallel processes (either at initialisation or by calling
+   :func:`Prior.set_reference`). They will be taken into account e.g. for starting
+   parallel MCMC chains at different points/distributions of your choice.
 
 The syntax for priors and ref's has the following fields:
 
@@ -50,7 +55,7 @@ The syntax for priors and ref's has the following fields:
   as they are understood for each particular pdf in :class:`scipy.stats`; e.g. for a
   ``uniform`` pdf, ``loc`` is the lower bound and ``scale`` is the length of the domain,
   whereas in a gaussian (``norm``) ``loc`` is the mean and ``scale`` is the standard
-  deviation).
+  deviation.
 + Additional specific parameters of the distribution, e.g. ``a`` and ``b`` as the powers
   of a Beta pdf.
 
@@ -112,8 +117,8 @@ the definition of :ref:`external likelihoods <likelihood_external>`. We will cal
 custom priors "`external` priors".
 
 Inside the ``prior`` block, list a pair of priors as ``[name]: [function]``, where the
-functions must return **log**-priors. This priors will be multiplied by the
-one-dimensional ones defined above. Even if you define an prior for some parameters
+functions must return **log**-priors. These priors will be multiplied by the
+one-dimensional ones defined above. Even if you define a prior for some parameters
 in the ``prior`` block, you still have to specify their bounds in the ``params`` block.
 
 A prior function can be specified in two different ways:
@@ -142,17 +147,14 @@ b) **As a string,** which will be passed to ``eval()``. The string can be a
 
 .. warning::
 
-   At this moment, external priors can only be functions of **sampled** and **fixed**
-   parameters. This may be extended in the future to dependence on **derived** parameters,
-   probably just for dynamically defined ones, but not for those computed by the theory
-   code, since otherwise the full prior could not be computed **before** the likelihood,
+   External priors can only be functions **sampled** and **fixed**
+   and **derived** parameters that are dynamically defined in terms of other inputs.
+   Derived parameters computed by the theory code cannot be used in a prior, since
+   otherwise the full prior could not be computed **before** the likelihood,
    preventing us from avoiding computing the likelihood when the prior is null, or
    forcing a *post-call* to the prior.
 
-   **Workaround #1:** If the derived parameter(s) can be computed easily from sampled and
-   fixed parameters, do the computation inside the call to the external prior.
-
-   **Workaround #2:** Define your function as a
+   **Workaround:** Define your function as a
    :ref:`external likelihood <likelihood_external>` instead, since likelihoods do have
    access to derived parameters (for an example, see `this comment
    <https://github.com/CobayaSampler/cobaya/issues/18#issuecomment-447818811>`_).
@@ -186,7 +188,7 @@ In general, avoid improper priors, since they will produce unexpected errors, e.
 Defining parameters dynamically
 -------------------------------
 
-We may want to sample in a parameter space different than the one understood by the
+We may want to sample in a parameter space different from the one understood by the
 likelihood, e.g. because we expect the posterior to be simpler on the alternative
 parameters.
 
@@ -206,7 +208,7 @@ from the logarithm of an **input** parameter of the likelihood, we would do:
       logx:
         prior: [...]
         drop: True
-      x: "lambda logx: np.exp(x)"
+      x: "lambda logx: np.exp(logx)"
       y:
         derived: "lambda x: x**2"
 
@@ -216,13 +218,14 @@ parameters:
 + **Sampled** parameters, i.e. those that have a prior, including ``logx`` but not ``x``
   (it does not have a prior: it's fixed by a function). Those are the ones with which the
   **sampler** interacts. Since the likelihood does not understand them, they must be
-  **dropped** with ``drop: True``.
+  **dropped** with ``drop: True`` if you are using any parameter-agnostic components.
 
 + Likelihood **input** parameters: those that will be passed to the likelihood
   (or theory). They are identified by either having a prior and not being **dropped**, or
   having being assigned a fixed value or a function. Here, ``x`` would be an input
   parameter, but not ``logx``.
 
+.. _cobaya_diagram:
 .. image:: ./img/diagram.svg
    :align: center
    :width: 60%
@@ -339,18 +342,26 @@ Just give it a try and it should work fine, but, in case you need the details:
 """
 
 # Global
-import numpy as np
 import numbers
 from types import MethodType
+from typing import Sequence, NamedTuple, Callable, Optional, Mapping, List
+import numpy as np
 
 # Local
-from cobaya.conventions import _prior, partag, _prior_1d_name
+from cobaya.conventions import prior_1d_name
+from cobaya.typing import PriorsDict
 from cobaya.tools import get_external_function, get_scipy_1d_pdf, read_dnumber
-from cobaya.tools import _fast_uniform_logpdf, _fast_norm_logpdf, getfullargspec
+from cobaya.tools import _fast_norm_logpdf, getfullargspec
 from cobaya.log import LoggedError, HasLogger
+from cobaya.parameterization import Parameterization
 
 # Fast logpdf for uniforms and norms (do not understand nan masks!)
-fast_logpdfs = {"uniform": _fast_uniform_logpdf, "norm": _fast_norm_logpdf}
+fast_logpdfs = {"norm": _fast_norm_logpdf}
+
+
+class ExternalPrior(NamedTuple):
+    logp: Callable
+    params: Sequence[str]
 
 
 class Prior(HasLogger):
@@ -358,47 +369,36 @@ class Prior(HasLogger):
     Class managing the prior and reference pdf's.
     """
 
-    def __init__(self, parameterization, info_prior=None):
+    def __init__(self, parameterization: Parameterization,
+                 info_prior: Optional[PriorsDict] = None):
         """
         Initializes the prior and reference pdf's from the input information.
         """
         self.set_logger()
-        constant_params_info = parameterization.constant_params()
+        self._parameterization = parameterization
         sampled_params_info = parameterization.sampled_params_info()
-        if not sampled_params_info:
-            self.mpi_warning("No sampled parameters requested! "
-                             "This will fail for non-mock samplers.")
         # pdf: a list of independent components
         # in principle, separable: one per parameter
         self.params = []
         self.pdf = []
-        self.ref_pdf = []
-        self._ref_is_pointlike = True
         self._bounds = np.zeros((len(sampled_params_info), 2))
         for i, p in enumerate(sampled_params_info):
             self.params += [p]
-            prior = sampled_params_info[p].get(_prior)
+            prior = sampled_params_info[p].get("prior")
             self.pdf += [get_scipy_1d_pdf({p: prior})]
             fast_logpdf = fast_logpdfs.get(self.pdf[-1].dist.name)
             if fast_logpdf:
                 self.pdf[-1].logpdf = MethodType(fast_logpdf, self.pdf[-1])
-            # Get the reference (1d) pdf
-            ref = sampled_params_info[p].get(partag.ref)
-            # Cases: number, pdf (something, but not a number), nothing
-            if isinstance(ref, numbers.Real):
-                self.ref_pdf += [float(ref)]
-            elif ref is not None:
-                self.ref_pdf += [get_scipy_1d_pdf({p: ref})]
-                self._ref_is_pointlike = False
-            else:
-                self.ref_pdf += [np.nan]
-                self._ref_is_pointlike = False
             self._bounds[i] = [-np.inf, np.inf]
             try:
                 self._bounds[i] = self.pdf[-1].interval(1)
-            except AttributeError:
-                raise LoggedError(self.log, "No bounds defined for parameter '%s' "
-                                            "(maybe not a scipy 1d pdf).", p)
+            except AttributeError as excpt:
+                raise LoggedError(
+                    self.log,
+                    "No bounds defined for parameter '%s' "
+                    "(maybe not a scipy 1d pdf).",
+                    p
+                ) from excpt
         self._uniform_indices = np.array(
             [i for i, pdf in enumerate(self.pdf) if pdf.dist.name == 'uniform'],
             dtype=int)
@@ -410,47 +410,41 @@ class Prior(HasLogger):
         self._lower_limits = self._bounds[:, 0].copy()
         self._uniform_logp = -np.sum(np.log(self._upper_limits[self._uniform_indices] -
                                             self._lower_limits[self._uniform_indices]))
-
+        # Set the reference pdf's
+        self._ref_is_pointlike: Optional[bool] = None
+        self.set_reference({p: v.get("ref") for p, v in sampled_params_info.items()})
         # Process the external prior(s):
         self.external = {}
-        for name in (info_prior if info_prior else {}):
-            if name == _prior_1d_name:
+        self.external_dependence = set()
+        info_prior = info_prior or {}
+        for name in info_prior:
+            if name == prior_1d_name:
                 raise LoggedError(self.log, "The name '%s' is a reserved prior name. "
-                                            "Please use a different one.", _prior_1d_name)
+                                            "Please use a different one.", prior_1d_name)
             self.log.debug(
                 "Loading external prior '%s' from: '%s'", name, info_prior[name])
-            opts = {"logp": get_external_function(info_prior[name], name=name)}
-            self.external[name] = opts
-            opts["argspec"] = (
-                getfullargspec(opts["logp"]))
-            opts["params"] = {
-                p: list(sampled_params_info).index(p)
-                for p in opts["argspec"].args if p in sampled_params_info}
-            opts["constant_params"] = {
-                p: constant_params_info[p]
-                for p in opts["argspec"].args if p in constant_params_info}
-            if (not (len(opts["params"]) +
-                     len(opts["constant_params"]))):
-                raise LoggedError(
-                    self.log, "None of the arguments of the external prior '%s' "
-                              "are known *fixed* or *sampled* parameters. "
-                              "This prior recognizes: %r", name,
-                    opts["argspec"].args)
-            params_without_default = opts["argspec"].args[
-                                     :(len(opts["argspec"].args) -
-                                       len(opts[
-                                               "argspec"].defaults or []))]
-            if not all((p in opts["params"] or
-                        p in opts["constant_params"])
-                       for p in params_without_default):
-                raise LoggedError(
-                    self.log, "Some of the arguments of the external prior '%s' cannot "
-                              "be found and don't have a default value either: %s",
-                    name, list(set(params_without_default)
-                               .difference(opts["params"])
-                               .difference(opts["constant_params"])))
+            logp = get_external_function(info_prior[name], name=name)
+            argspec = getfullargspec(logp)
+            known = set(parameterization.input_params())
+            params = [p for p in argspec.args if p in known]
+            params_without_default = set(
+                argspec.args[:(len(argspec.args) - len(argspec.defaults or []))])
+            unknown = params_without_default - known
+            if unknown:
+                if unknown.intersection(parameterization.derived_params()):
+                    err = ("External prior '%s' has arguments %s that are output derived "
+                           "parameters, Priors must be functions of input parameters. "
+                           "Use a separate 'likelihood' for the prior if needed.")
+                else:
+                    err = ("Some arguments of the external prior '%s' cannot be "
+                           "found and don't have a default value either: %s")
+                raise LoggedError(self.log, err, name, list(unknown))
+            self.external_dependence.update(params)
+            self.external[name] = ExternalPrior(logp=logp, params=params)
             self.mpi_warning("External prior '%s' loaded. "
                              "Mind that it might not be normalized!", name)
+
+        parameterization.check_dropped(self.external_dependence)
 
     def d(self):
         """
@@ -462,45 +456,75 @@ class Prior(HasLogger):
     # Not very useful, except for getting the prior names as list(self)
     # Created for consistency with likelihoods
     def __iter__(self):
-        return (p for p in [_prior_1d_name] + list(self.external))
+        return (p for p in [prior_1d_name] + list(self.external))
 
     def __len__(self):
         return 1 + len(self.external)
 
-    def bounds(self, confidence_for_unbounded=1):
+    def bounds(
+            self, confidence: float = 1, confidence_for_unbounded: float = 1
+    ) -> np.ndarray:
         """
-        For unbounded parameters, if ``confidence_for_unbounded < 1`` given, the
-        returned interval contains the requested confidence level interval with equal
-        areas around the median.
+        Returns a list of bounds ``[min, max]`` per parameter, containing confidence
+        intervals of a certain ``confidence`` level, centered around the median, by
+        default (``confidence=1`` the full parameter range).
 
-        Returns:
-           An array of bounds ``[min,max]`` for the parameters, in the order given by the
-           input.
+        For unbounded parameters, if ``confidence=1``, one can specify some value slightly
+        smaller than 1 for ``confidence_for_unbounded``, in order to ensure that all
+        bounds returned are finite.
 
         NB: If an external prior has been defined, the bounds given in the 'prior'
         sub-block of that particular parameter's info may not be faithful to the
-        externally defined prior.
+        externally defined prior. A warning will be raised in that case.
+
+        Parameters
+        ----------
+        confidence : float, default 1
+            Probability mass contained within the returned bounds. Capped at 1.
+
+        confidence_for_unbounded : float, default 1
+            Confidence level applied to the unbounded parameters if ``confidence=1``;
+            ignored otherwise.
+
+        Returns
+        -------
+        bounds : 2-d array [[param1_min, param1_max], ...]
+            Array of bounds ``[min,max]`` for the parameters, in the order given by the
+            input.
+
+        Raises
+        ------
+        LoggedError
+            If some parameters do not have bounds defined.
         """
+        if confidence < 1:
+            return np.array([pdf.interval(confidence) for pdf in self.pdf])
+        # Else, confidence >= 1:
         if confidence_for_unbounded >= 1:
             return self._bounds
-        try:
+        else:
             bounds = self._bounds.copy()
             infs = list(set(np.argwhere(np.isinf(bounds)).T[0]))
-            if infs:
-                self.mpi_warning("There are unbounded parameters (%r). Prior bounds "
-                                 "are given at %s confidence level. Beware of "
-                                 "likelihood modes at the edge of the prior",
-                                 [self.params[ix] for ix in infs],
-                                 confidence_for_unbounded)
-                bounds[infs] = [
-                    self.pdf[i].interval(confidence_for_unbounded) for i in infs]
-            return bounds
-        except AttributeError:
-            raise LoggedError(
-                self.log,
-                "Some parameter names (positions %r) have no bounds defined.", infs)
+            try:
+                if infs:
+                    self.mpi_warning(
+                        "There are unbounded parameters (%r). Prior bounds "
+                        "are given at %s confidence level. Beware of "
+                        "likelihood modes at the edge of the prior",
+                        [self.params[ix] for ix in infs],
+                        confidence_for_unbounded
+                    )
+                    bounds[infs] = [
+                        self.pdf[i].interval(confidence_for_unbounded) for i in infs]
+                return bounds
+            except AttributeError as excpt:
+                raise LoggedError(
+                    self.log,
+                    "Some parameter names (positions %r) have no bounds defined.",
+                    infs
+                ) from excpt
 
-    def sample(self, n=1, ignore_external=False):
+    def sample(self, n=1, ignore_external=False, random_state=None):
         """
         Generates samples from the prior pdf.
 
@@ -515,9 +539,9 @@ class Prior(HasLogger):
             raise LoggedError(
                 self.log, "It is not possible to sample from an external prior "
                           "(see help of this function on how to fix this).")
-        return np.array([pdf.rvs(n) for pdf in self.pdf]).T
+        return np.array([pdf.rvs(n, random_state=random_state) for pdf in self.pdf]).T
 
-    def logps(self, x):
+    def logps(self, x: np.ndarray) -> List[float]:
         """
         Takes a point (sampled parameter values, in the correct order).
 
@@ -528,21 +552,17 @@ class Prior(HasLogger):
            ones (if present) are the priors specified in the ``prior`` block
            in the same order.
         """
-        self.log.debug("Evaluating prior at %r", x)
-        # noinspection PyTypeChecker
-        if all(x <= self._upper_limits) and all(x >= self._lower_limits):
-            logps = [self._uniform_logp + (sum([logpdf(xi) for logpdf, xi in
-                                                zip(self._non_uniform_logpdf,
-                                                    x[self._non_uniform_indices])])
-                                           if len(self._non_uniform_indices) else 0)] \
-                    + self.logps_external(x)
+        logps = self.logps_internal(x)
+        if logps != -np.inf:
+            if self.external:
+                input_params = self._parameterization.to_input(x)
+                return [logps] + self.logps_external(input_params)
+            else:
+                return [logps]
         else:
-            logps = [-np.inf] * (1 + len(self.external))
+            return [-np.inf] * (1 + len(self.external))
 
-        self.log.debug("Got logpriors = %r", logps)
-        return logps
-
-    def logp(self, x):
+    def logp(self, x: np.ndarray):
         """
         Takes a point (sampled parameter values, in the correct order).
 
@@ -551,11 +571,33 @@ class Prior(HasLogger):
         """
         return np.sum(self.logps(x), axis=0)
 
-    def logps_external(self, x):
+    def logps_internal(self, x: np.ndarray) -> float:
+        """
+        Takes a point (sampled parameter values, in the correct order).
+
+        Returns:
+           The prior log-probability density of the given point
+           or array of points, only including the products
+           of 1d priors specified in the ``params`` block, no external priors
+        """
+        self.log.debug("Evaluating prior at %r", x)
+        if all(x <= self._upper_limits) and all(x >= self._lower_limits):
+            # Apparently faster to sum list than generator (for short enough lists)
+            logps = self._uniform_logp + (sum([logpdf(xi) for logpdf, xi in
+                                               zip(self._non_uniform_logpdf,
+                                                   x[self._non_uniform_indices])])
+                                          if len(self._non_uniform_indices) else 0)
+        else:
+            logps = -np.inf
+        self.log.debug("Got logpriors (internal) = %r", logps)
+        return logps
+
+    def logps_external(self, input_params) -> List[float]:
         """Evaluates the logprior using the external prior only."""
-        return [ext["logp"](**dict({p: x[i] for p, i in ext["params"].items()},
-                                   **ext["constant_params"]))
-                for ext in self.external.values()]
+        logps = [ext.logp(**{p: input_params[p] for p in ext.params})
+                 for ext in self.external.values()]
+        self.log.debug("Got logpriors (external) = %r", logps)
+        return logps
 
     def covmat(self, ignore_external=False):
         """
@@ -568,11 +610,72 @@ class Prior(HasLogger):
                 "It is not possible to get the covariance matrix from an external prior.")
         return np.diag([pdf.var() for pdf in self.pdf]).T
 
-    def reference_is_pointlike(self):
+    def set_reference(self, ref_info):
+        """
+        Sets or updates the reference pdf with the given parameter input info.
+
+        ``ref_info`` should be a dict ``{parameter_name: [ref definition]}``, not
+        ``{parameter_name: {"ref": [ref definition]}}``.
+
+        When called after prior initialisation, not mentioning a parameter leaves
+        its reference pdf unchanged, whereas explicitly setting ``ref: None`` sets
+        the prior as the reference pdf.
+
+        You can set different reference pdf's/values for different MPI processes,
+        e.g. for fixing different starting points for parallel MCMC chains.
+        """
+        if not hasattr(self, "ref_pdf"):
+            # Initialised with nan's in case ref==None: no ref -> uses prior
+            self.ref_pdf = [np.nan] * self.d()
+        unknown = set(ref_info).difference(self.params)
+        if unknown:
+            raise LoggedError(self.log,
+                              f"Cannot set reference pdf for parameter(s) {unknown}: "
+                              "not sampled parameters.")
+        for i, p in enumerate(self.params):
+            # The next if ensures correct behaviour in "update call",
+            # where not mentioning a parameter and making its ref None are different
+            # (not changing vs setting to prior)
+            if p not in ref_info:
+                continue  # init: use prior; update: don't change
+            ref = ref_info[p]
+            # [number, number] interpreted as Gaussian
+            if isinstance(ref, Sequence) and len(ref) == 2 and all(
+                    isinstance(n, numbers.Number) for n in ref):
+                ref = {"dist": "norm", "loc": ref[0], "scale": ref[1]}
+            if isinstance(ref, numbers.Real):
+                self.ref_pdf[i] = float(ref)
+            elif isinstance(ref, Mapping):
+                self.ref_pdf[i] = get_scipy_1d_pdf({p: ref})
+            elif ref is None:
+                # We only get here if explicit `param: None` mention!
+                self.ref_pdf[i] = np.nan
+            else:
+                raise LoggedError(self.log,
+                                  "'ref' for starting position should be None or a number"
+                                  ", a list of two numbers for normal mean and deviation,"
+                                  "or a dict with parameters for a scipy distribution.")
+        # Re-set the pointlike-ref property
+        self._set_pointlike()
+
+    @property
+    def reference_is_pointlike(self) -> bool:
+        """
+        Whether there is a fixed reference point for all parameters, such that calls to
+        :func:`Prior.reference` would always return the same.
+        """
+        if not hasattr(self, "_ref_is_pointlike"):
+            self._set_pointlike()
         return self._ref_is_pointlike
 
+    def _set_pointlike(self):
+        self._ref_is_pointlike = all(
+            # np.nan is a numbers.Number instance, but not a fixed ref (uses prior)
+            (isinstance(ref, numbers.Number) and not np.isnan(ref))
+            for ref in self.ref_pdf)
+
     def reference(self, max_tries=np.inf, warn_if_tries="10d", ignore_fixed=False,
-                  warn_if_no_ref=True):
+                  warn_if_no_ref=True, random_state=None) -> np.ndarray:
         """
         Returns:
           One sample from the ref pdf. For those parameters that do not have a ref pdf
@@ -592,21 +695,32 @@ class Prior(HasLogger):
         """
         if np.nan in self.ref_pdf and warn_if_no_ref:
             self.log.info(
-                "Reference values or pdf's for some parameters were not provided. "
+                "Reference values or pdfs for some parameters were not provided. "
                 "Sampling from the prior instead for those parameters.")
-        ignore_cond = (
-            lambda x: (x is np.nan or
-                       (isinstance(x, numbers.Real) if ignore_fixed else False)))
-        where_ignore_ref = [ignore_cond(r) for r in self.ref_pdf]
+        # As a curiosity, `r is np.nan` was returning False after `r = np.nan` if
+        # it had been passed via MPI before the test, since this creates a "new" np.nan
+        # NB: isinstance(np.nan, numers.Real) --> True
+        where_ignore_ref = [
+            isinstance(r, numbers.Real) and (np.isnan(r) or ignore_fixed)
+            for r in self.ref_pdf
+        ]
         tries = 0
         warn_if_tries = read_dnumber(warn_if_tries, self.d())
+        ref_sample = np.empty(len(self.ref_pdf))
         while tries < max_tries:
             tries += 1
-            ref_sample = np.array([getattr(ref_pdf, "rvs", lambda: ref_pdf.real)()
-                                   for i, ref_pdf in enumerate(self.ref_pdf)])
-            if np.any(where_ignore_ref):
-                prior_sample = self.sample(ignore_external=True)[0]
+            if any(where_ignore_ref):
+                prior_sample = self.sample(ignore_external=True,
+                                           random_state=random_state)[0]
                 ref_sample[where_ignore_ref] = prior_sample[where_ignore_ref]
+            for i, ref_pdf in enumerate(self.ref_pdf):
+                if not where_ignore_ref[i]:
+                    if hasattr(ref_pdf, "rvs"):
+                        ref_sample[i] = ref_pdf.rvs(
+                            random_state=random_state)  # type: ignore
+                    else:
+                        ref_sample[i] = ref_pdf.real
+
             if self.logp(ref_sample) > -np.inf:
                 return ref_sample
             if tries == warn_if_tries:
@@ -614,7 +728,7 @@ class Prior(HasLogger):
                     "If stuck here, maybe it is not possible to sample from the "
                     "reference pdf a point with non-null prior. Check that the reference "
                     "pdf and the prior are consistent.")
-        if self.reference_is_pointlike():
+        if self.reference_is_pointlike:
             raise LoggedError(self.log, "The reference point provided has null prior. "
                                         "Set 'ref' to a different point or a pdf.")
         raise LoggedError(
@@ -623,25 +737,19 @@ class Prior(HasLogger):
                       "Maybe your prior is improper of your reference pdf is "
                       "null-defined in the domain of the prior.", max_tries)
 
-    def reference_covmat(self):
+    def reference_variances(self):
         """
         Returns:
-          The standard deviation of the 1d ref pdf's. For those parameters that do not
-          have a ref pdf defined, the standard deviation of the prior is taken instead.
+          The standard variances of the 1d ref pdf's. For those parameters that do not
+          have a proposal defined, the standard deviation of the prior can be taken
+          as a starting point to estimate one.
         """
-        covmat = np.diag([getattr(ref_pdf, "var", lambda: np.nan)()
-                          for i, ref_pdf in enumerate(self.ref_pdf)])
-        where_no_ref = np.isnan(covmat)
+        variances = np.array([getattr(ref_pdf, "var", lambda: np.nan)()
+                              for i, ref_pdf in enumerate(self.ref_pdf)])
+        where_no_ref = np.isnan(variances)
         if np.any(where_no_ref):
             self.mpi_warning("Reference pdf not defined or improper for some parameters. "
                              "Using prior's sigma instead for them.")
-            covmat[where_no_ref] = self.covmat(ignore_external=True)[where_no_ref]
-        return covmat
-
-    # Python magic for the "with" statement
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exception_type, exception_value, traceback):
-        pass
+            variances[where_no_ref] = np.diag(self.covmat(ignore_external=True
+                                                          ))[where_no_ref]
+        return variances

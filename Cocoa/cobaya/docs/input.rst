@@ -29,8 +29,7 @@ In addition, there are some *top level* options (i.e. defined outside any block)
 
 + ``output``: determines where the output files are written and/or a prefix for their names — see :ref:`output_shell`.
 + ``packages_path``: path where the external packages have been automatically installed — see :doc:`installation_cosmo`.
-+ ``debug``: sets the verbosity level of the output. By default (undefined or ``False``), it produces a rather informative output, reporting on initialization, overall progress and results. If ``True``, it produces a very verbose output (a few lines per sample) that can be used for debugging. You can also set it directly to a particular `integer level of the Python logger <https://docs.python.org/2/library/logging.html#logging-levels>`_, e.g. 40 to produce error output only (alternatively, ``cobaya-run`` can take the flag ``--debug`` to produce debug output, that you can pipe to a file with ``>file``).
-+ ``debug_file``: a file name, with a relative or absolute path if desired, to which to send all logged output. When used, only basic progress info is printed on-screen, and the full debug output (if ``debug: True``) will be sent to this file instead
++ ``debug``: sets the verbosity level of the output. By default (undefined or ``False``), it produces a rather informative output, reporting on initialization, overall progress and results. If ``True``, it produces a very verbose output (a few lines per sample) that can be used for debugging. You can also set it directly to a particular `integer level of the Python logger <https://docs.python.org/2/library/logging.html#logging-levels>`_, e.g. 40 to produce error output only (alternatively, ``cobaya-run`` can take the flag ``--debug`` to produce debug output, that you can pipe to a file with ``>file``). It can also be set to a file name, with a relative or absolute path; in that case only basic progress info is printed on-screen, and the full debug output will be sent to that file.
 
 
 Running **cobaya**
@@ -65,14 +64,15 @@ To run **cobaya** from the shell, use the command ``cobaya-run``, followed by yo
       If you notice secondary process not dying by themselves in any other circumstance, please contact us, including as much information on the run as possible.
 
 
-To run **cobaya** from a Python interpreter, simply do
+To run **cobaya** from a Python script or interpreter, simply do
 
 .. code:: python
 
     from cobaya.run import run
     updated_info, sampler = run(your_input)
 
-where ``your_input`` is a Python dictionary (for how to create one, see :ref:`example_quickstart_interactive`).
+where ``your_input`` is a Python dictionary, yaml file name or yaml text (for how to create one, see :ref:`example_quickstart_interactive`).
+For debugging purposes you can also pass in options to override those in the input, e.g. `run(your_input, debug=True, stop_at_error=True)``
 
 To run **cobaya** with MPI in this case, save your script to some file and run ``python your_script.py`` with your MPI run script.
 
@@ -88,6 +88,7 @@ To overwrite previous results (**use with care!**), either:
 
 * Set ``force: True`` in the input.
 * Invoke ``cobaya-run`` with a ``-f`` (or ``--force``) flag.
+* From a script, use ``run(your_input, force=True)``.
 
 .. warning::
 
@@ -97,6 +98,7 @@ If instead you would like to **resume a previous sample**, either:
 
 * Set ``resume: True`` in the input.
 * Invoke ``cobaya-run`` with a ``-r`` (or ``--resume``) flag.
+* From a script, use ``run(your_input, resume=True)``.
 
 In this case, the new input will be compared to the existing one, and an error will be raised if they are not compatible, mentioning the first part of the input that was found to be inconsistent.
 
@@ -174,4 +176,7 @@ Some common YAML *gotchas*
    For the YAML *connoisseur*, notice that the YAML parser used here has been modified to simplify the input/output notation: it now retains the ordering of parameters and likelihoods and prints arrays as lists.
 
 
+``run`` function
+----------------
 
+.. autofunction:: run.run
