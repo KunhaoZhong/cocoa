@@ -86,13 +86,13 @@ Assuming the user opted for the easier *Conda installation*, type:
 
         $ conda activate cocoapy38
     
-        $(cocoapy38) git clone --depth 1 -b mainpy38 https://github.com/CosmoLike/cocoa.git
+        $(cocoapy38) git clone --depth 1 -b v3.0 https://github.com/CosmoLike/cocoa.git
 
 to clone the repository. 
 
 Cocoa developers should drop the shallow clone option `--depth 1`; they should also authenticate to GitHub via ssh keys and use the command instead
 
-        $(cocoapy38) git clone -b mainpy38 git@github.com:CosmoLike/cocoa.git
+        $(cocoapy38) git clone -b v3.0 git@github.com:CosmoLike/cocoa.git
 
 :warning: **Warning** :warning: We have a limited monthly quota in bandwidth for Git LFS files, and therefore we ask users to use good judgment in the number of times they clone files from Cocoa's main repository.
  
