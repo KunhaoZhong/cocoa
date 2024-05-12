@@ -1,0 +1,7 @@
+n_live: 4000
+
+parallel:
+  kind: cobaya_mpi
+  n_batch: 400 
+
+is_equal_weights: True
