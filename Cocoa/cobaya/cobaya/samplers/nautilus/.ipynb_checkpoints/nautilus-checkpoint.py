@@ -108,7 +108,7 @@ class nautilus(Sampler):
             start =time.time()
             sampler.run(verbose=True)
             end   =time.time()
-            # print("run time = ", end-start)
+            print("run time = ", end-start)
         # KZ: MPI run end
         else:
             # KZ: you can still run nautilus without any parallization, but would be slow
@@ -122,6 +122,7 @@ class nautilus(Sampler):
         if is_main_process():
             self.save_raw(np.array([sampler.evidence()]))
             points, log_w, log_l = sampler.posterior(equal_weight=self.is_equal_weights)
+            self.mpi_info("Saving posteriors, number of points is {}".format(len(samples)))
             self.save_sample(points, log_w, log_l, "1")
             self.mpi_info("nautilus finished")
         return

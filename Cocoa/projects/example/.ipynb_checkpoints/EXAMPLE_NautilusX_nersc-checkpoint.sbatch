@@ -4,7 +4,7 @@
 #SBATCH --output=example_nautilus-%A_%a.out
 #SBATCH -e example_nautilus-%A_%a.out.err
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=100
+#SBATCH --ntasks-per-node=80
 #SBATCH --cpus-per-task=1
 #SBATCH --qos=regular
 #SBATCH --time=8:00:00
