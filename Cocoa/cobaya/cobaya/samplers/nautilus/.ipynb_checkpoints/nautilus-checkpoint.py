@@ -2,6 +2,7 @@
 .. module:: samplers.nautilus
 
 Kunhao Zhong: A low-level implementation for the nautilus cobaya wrapper
+KZ update: I impletemented nautilus with mpi-run, running on 1 node is ok, but cross node is not tested. But since it's fast one node should be ok
 TODO:   1. Does NOT support derived parameters; NOT blocking (fast/slow hierachy)
         2. @classmethod about installation
         3. _correct_unphysical_fraction() 
