@@ -1534,6 +1534,7 @@ void init_survey(
 
 void set_cosmological_parameters(
     const double omega_matter,
+    const double omega_matter_growth,
     const double hubble
   )
 {
@@ -1545,6 +1546,7 @@ void set_cosmological_parameters(
 
   int cache_update = 0;
   if (fdiff(cosmology.Omega_m, omega_matter) ||
+      fdiff(cosmology.Omega_m_growth, omega_matter_growth) ||
       fdiff(cosmology.h0, hubble/100.0)) // assuming H0 in km/s/Mpc
   {
     cache_update = 1;
@@ -1552,6 +1554,7 @@ void set_cosmological_parameters(
   if (1 == cache_update)
   {
     cosmology.Omega_m = omega_matter;
+    cosmology.Omega_m_growth = omega_matter_growth;
     cosmology.Omega_v = 1.0-omega_matter;
     // Cosmolike only needs to know that there are massive neutrinos (>0)
     cosmology.Omega_nu = 0.1;

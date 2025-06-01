@@ -515,6 +515,7 @@ void init_survey(
 
 void set_cosmological_parameters(
     const double omega_matter,
+    const double omega_matter_growth,
     const double hubble
   );
 

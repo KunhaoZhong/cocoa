@@ -118,6 +118,7 @@ typedef struct
   // ---------------------------------------------------
   double Omega_b;  // baryon density paramter
   double Omega_m;  // matter density parameter
+  double Omega_m_growth;  // "growth" matter density parameter; specific to gg-split
   double Omega_v;  // cosmogical constant parameter
   double h0;       // Hubble constant
   double Omega_nu; // Omega_m = Omega_cdm + Omega_nu (neutrinos) + omb

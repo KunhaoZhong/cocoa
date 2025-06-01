@@ -6,3 +6,6 @@
 *.dSYM
 *.mod
 .DS_Store
+*.out.err
+Cocoa/projects/chains_desi_dr1/
+*.npy

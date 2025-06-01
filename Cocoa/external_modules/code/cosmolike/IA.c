@@ -290,7 +290,7 @@ void IA_A1_Z1Z2(
     }
   }
   
-  const double x = cosmology.Omega_m*nuisance.c1rhocrit_ia/growfac_a;
+  const double x = cosmology.Omega_m_growth*nuisance.c1rhocrit_ia/growfac_a;
   res[0] = A_Z1 * x;
   res[1] = A_Z2 * x;
 }
@@ -355,7 +355,7 @@ void IA_A2_Z1Z2(
     }
   }
 
-  const double x = cosmology.Omega_m*nuisance.c1rhocrit_ia/(growfac_a*growfac_a);
+  const double x = cosmology.Omega_m_growth*nuisance.c1rhocrit_ia/(growfac_a*growfac_a);
   res[0] = A2_Z1 * x;
   res[1] = A2_Z2 * x;
 }

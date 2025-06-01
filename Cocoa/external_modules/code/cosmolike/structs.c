@@ -109,6 +109,7 @@ void reset_cosmology_struct()
   cosmology.MGmu = 0.0;
   cosmology.Omega_b = 0.0;
   cosmology.Omega_m = 0.0;
+  cosmology.Omega_m_growth = 0.0;
   cosmology.Omega_v = 0.0;
   cosmology.h0 = 0.0;
   cosmology.Omega_nu = 0.0;
